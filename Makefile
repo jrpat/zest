@@ -1,26 +1,26 @@
-CFLAGS := -std=c++20 -O0 -fPIC -Wall -Wextra -Werror -pedantic
+CFLAGS := -O0 # can be set via command-line
+CFLAGS += -std=c++20 -Wall -Wextra -Werror -pedantic
 
+h := zest.hh
 test-src := t/*.cc
 test-bin := t/test
 
-all: $(test-bin)
-	-@$(test-bin) fail
-	-@$(test-bin) pass
+all: test-fail test-pass
 
 test-pass: $(test-bin)
-	$(test-bin) pass
+	-$(test-bin) pass
 
 test-fail: $(test-bin)
-	$(test-bin) fail
+	-$(test-bin) fail
 
-$(test-bin): zest.hh $(test-src)
+$(test-bin): $(h) $(test-src)
 	$(CXX) $(CFLAGS) -I. $(test-src) -o $@
 
-README.md: zest.hh $(test-bin) Makefile
+README.md: $(h) $(test-bin) Makefile
 	@printf '> This readme is automatically generated ' >$@
-	@printf 'from `zest.hh` and `t/test`. '            >>$@
+	@printf 'from `$(h)` and `$(test-bin)`. '          >>$@
 	@printf 'See `Makefile`.\n\n'                      >>$@
-	@grep '^\*\*' zest.hh | sed -e 's/** \{0,2\}//'    >>$@
+	@grep '^\*\*' $(h) | sed -e 's/** \{0,2\}//'       >>$@
 	@printf "\n\n"                                     >>$@
 	@echo 'SAMPLE OUTPUT'                              >>$@
 	@echo '-------------'                              >>$@
@@ -38,5 +38,4 @@ README.md: zest.hh $(test-bin) Makefile
 
 clean:
 	@rm -rf $(test-bin)
-
 

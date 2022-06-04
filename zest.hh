@@ -82,10 +82,10 @@
 **  CONFIGURATION
 **  -------------
 **
-**  Zest tries to be smart about whether to output ANSI colors
-**  with its output. You shouldn't ever have to think about it.
-**  But if you want to disable color output entirely,
-**  define `ZEST_NO_COLOR` before #include'ing zest.hh:
+**  Zest tries to be smart about whether to output ANSI colors.
+**  You shouldn't ever have to think about it. But if you want
+**  to disable color output entirely, define `ZEST_NO_COLOR`
+**  before #include'ing zest.hh:
 **
 **      c++ ... -DZEST_NO_COLOR
 **
@@ -114,25 +114,24 @@
 **      {
 **        public: // test cases do not have access to private members
 **          int count;
-**          void before() override {
+**          void before() {
 **            std::cout << "before count = " << count;
 **          }
-**          void after() override {
+**          void after() {
 **            std::cout << "after count = " << count;
-**            if (count < 0) { fail() << "Count too low!"; }
+**            if (count < 0) fail() << "Count too low!";
 **          }
 **      };
+**
+**  Then use the `ZEST_TEST` macro to define a syntax for your new type:
+**
+**      #define COUNTER_TEST(group, title) \
+**        ZEST_TEST(CounterTestCase, group, title)
 **
 **  Inside your tests, you can use the `THIS_TEST_AS` macro to get
 **  a reference to the current subclass test:
 **
 **      THIS_TEST_AS(CounterTestCase)  // CounterTestCase&
-**
-**  As an additional convenience, you can use the `ZEST_TEST` macro to
-**  provide a "native-feeling" syntax for your new test type:
-**
-**      #define COUNTER_TEST(group, title) \
-**        ZEST_TEST(CounterTestCase, group, title)
 **
 **  Then define counter tests like you'd expect:
 **
@@ -147,22 +146,21 @@
 **        THIS_TEST_AS(CounterTest).count = -1;
 **      }
 **
-**
 **  "passing test" will output:
 **
 **      before count = 0
 **      -- test --
 **      after count = 99
 **
-**  and "failing test" will fail with a "Count too low!" message.
+**  and "failing test" will fail with a standard failure output:
+**
+**      /path/to/file:144: FAIL: Count too low!
 */
 
-
 #include <iostream>
+#include <map>
 #include <optional>
 #include <string>
-#include <map>
-#include <set>
 #include <vector>
 
 #if !defined(ZEST_NO_COLOR)
@@ -170,19 +168,11 @@
 # include <cstdlib>
 #endif
 
+namespace zest {
 
 #define ZOUT(x) do{ std::cout << x << std::flush; }while(0)
 #define ZPRN(x) do{ std::cout << x << std::endl << std::flush; }while(0)
 #define ZLOG(x) ZPRN(#x " = " << (x))
-
-
-namespace zest
-{
-
-struct TestCase;
-using Str = std::string;
-using RunFunc = void(TestCase&);
-
 
 #if defined(ZEST_NO_COLOR)
 static inline bool DOCOLOR = false;
@@ -191,10 +181,10 @@ static inline bool DOCOLOR = isatty(fileno(stdout)) && getenv("TERM")
                           && (getenv("TERM") != std::string_view("dumb"));
 #endif
 
-static inline auto CLR_RED = !DOCOLOR ? "" : "\033[31m";
-static inline auto CLR_GRN = !DOCOLOR ? "" : "\033[32m";
-static inline auto CLR_DIM = !DOCOLOR ? "" : "\033[38;5;8m";
-static inline auto CLR_OFF = !DOCOLOR ? "" : "\033[m";
+static inline auto cRED = !DOCOLOR ? "" : "\033[31m";
+static inline auto cGRN = !DOCOLOR ? "" : "\033[32m";
+static inline auto cDIM = !DOCOLOR ? "" : "\033[38;5;8m";
+static inline auto cOFF = !DOCOLOR ? "" : "\033[m";
 
 
 template <class T>
@@ -202,25 +192,15 @@ concept Printable = requires(std::ostream& os, T x) { os << x; };
 
 template <Printable T>
 std::ostream& operator<<(std::ostream& os, std::optional<T> opt)
-{
-  if (opt){ os << *opt; } else { os << "(none)"; }
-  return os;
-}
+{ if (opt){ os << *opt; } else { os << "(none)"; } return os; }
 
 
-struct Runner
-{
-    static inline std::map<Str, std::vector<TestCase*>> groups;
-    static inline bool only_mode = false;
-    static inline void skip(Str);
-    static inline void only(Str);
-    static inline int run();
-    static inline bool add(TestCase&, Str, Str, RunFunc*, Str, int);
-};
+using Str = std::string;
+using Run = void(struct TestCase&);
 
 struct TestCase
 {
-    RunFunc* run;
+    Run* run;
     Str title;
     Str file;
     int line;
@@ -228,11 +208,8 @@ struct TestCase
     bool done = false;
 
     std::ostream& output() {
-      if (!done && (failed == 1)) {
-        ZPRN(CLR_RED << " ✗ " << title << CLR_OFF);
-      } else if (done && (failed == 0)) {
-        ZPRN(CLR_GRN << " ✔ " << title << CLR_OFF);
-      }
+      if (!done && (failed == 1)) ZPRN(cRED << " ✗ " << title << cOFF);
+      else if (done && (!failed)) ZPRN(cGRN << " ✔ " << title << cOFF);
       return std::cout;
     }
 
@@ -241,7 +218,6 @@ struct TestCase
       output() << file << ":" << line << ": " << "FAIL: ";
       return std::cout;
     }
-
     inline std::ostream& fail() { return fail(file, line); }
 
     inline virtual void before() {}
@@ -251,70 +227,70 @@ struct TestCase
 class Test { public: template <class T> static void run(TestCase&); };
 struct Flag { static inline TestCase skip, only; };
 
-bool Runner::add(TestCase& c, Str g, Str t, RunFunc* r, Str f, int l) {
-  c.run=r; c.title=t; c.file=f; c.line=l;
-  groups[g].push_back(&c);
-  return true;
-}
+struct Runner
+{
+    static inline std::map<Str, std::vector<TestCase*>> groups;
+    static inline bool only_mode = false;
 
-int Runner::run() {
-  int nfail = 0;
-  int nskip = 0;
-  for (auto& [group, tests] : groups) {
-    ZPRN("\n[" << group << "]");
-    if ((tests[0] == &Flag::skip) ||
-        ((tests[0] != &Flag::only) && only_mode)) {
-      nskip += tests.size() - 1;
-      ZPRN(CLR_DIM << "  …skipping…" << CLR_OFF);
-      continue;
+    static bool add(TestCase& c, Str g, Str t, Run* r, Str f, int l) {
+      c.run=r; c.title=t; c.file=f; c.line=l;
+      groups[g].push_back(&c);
+      return true;
     }
-    for (auto test : tests) {
-      if (!test->run) { continue; }
-      test->before();
-      test->run(*test);
-      test->after();
-      test->done = true;
-      test->output();
-      nfail += test->failed ? 1 : 0;
+
+    static void skip(Str group) {
+      auto& g = groups[group];
+      g.insert(g.begin(), &Flag::skip);
     }
-  }
-  auto CLR = nfail ? CLR_RED : CLR_GRN;
-  printf("\n");
-  printf("%s\n┌──────┐", CLR);
-  printf("%s\n│ %-4s │", CLR, (nfail ? "FAIL" : "PASS"));
-  if (nskip) { printf("%s (%d skipped)", CLR_DIM, nskip); }
-  printf("%s\n└──────┘\n", CLR);
-  printf("\n\n%s", CLR_OFF);
-  return nfail ? 1 : 0;
-}
 
-void Runner::skip(Str group) {
-  auto& g = groups[group];
-  g.insert(g.begin(), &Flag::skip);
-}
+    static void only(Str group) {
+      auto& g = groups[group];
+      g.insert(g.begin(), &Flag::only);
+      only_mode = true;
+    }
 
-void Runner::only(Str group) {
-  auto& g = groups[group];
-  g.insert(g.begin(), &Flag::only);
-  only_mode = true;
-}
+    static inline int run() {
+      int nfail = 0;
+      int nskip = 0;
+      for (auto& [group, tests] : groups) {
+        ZPRN("\n[" << group << "]");
+        if ((tests[0] == &Flag::skip) ||
+            ((tests[0] != &Flag::only) && only_mode)) {
+          nskip += tests.size() - 1;
+          ZPRN(cDIM << "  …skipping…" << cOFF);
+          continue;
+        }
+        for (auto test : tests) {
+          if (!test->run) { continue; }
+          test->before();
+          test->run(*test);
+          test->after();
+          test->done = true;
+          test->output();
+          nfail += test->failed ? 1 : 0;
+        }
+      }
+      auto CLR = nfail ? cRED : cGRN;
+      printf("%s\n┌──────┐", CLR);
+      printf("%s\n│ %-4s │", CLR, (nfail ? "FAIL" : "PASS"));
+      if (nskip) printf("%s (%d skipped)", cDIM, nskip);
+      printf("%s\n└──────┘", CLR);
+      printf("\n%s\n", cOFF);
+      return nfail ? 1 : 0;
+    }
+};
+
 
 #define ZEST_IS_FN(NAME, COMP)                                         \
   template <class LHS, class RHS>                                      \
-  bool is_##NAME##_(                                                   \
-    zest::TestCase& test,                                              \
-    zest::Str lhs_str, const LHS& lhs,                                 \
-    zest::Str rhs_str, const RHS& rhs,                                 \
-    zest::Str file, size_t line)                                       \
-  {                                                                    \
+  bool is_##NAME##_(zest::TestCase& test, zest::Str f, size_t l,       \
+                    zest::Str lhs_str, const LHS& lhs,                 \
+                    zest::Str rhs_str, const RHS& rhs) {               \
     if (test.done) { throw "is_" #NAME " in finished test"; }          \
     if ((lhs COMP rhs)) { return true; }                               \
-    auto& out = test.fail(file, line)                                  \
-      << lhs_str << " " #COMP " " << rhs_str;                          \
+    auto& out = test.fail(f,l) << lhs_str << " " #COMP " " << rhs_str; \
     if constexpr (zest::Printable<RHS>) out << " (got " << rhs << ")"; \
-    out << "\n";                                                       \
-    return false;                                                      \
-  }                                                                    \
+    out << "\n"; return false; }
 
 ZEST_IS_FN(eq, ==)
 ZEST_IS_FN(ne, !=)
@@ -335,28 +311,22 @@ ZEST_IS_FN(le, <=)
   template <> void ZEST_FUN(g)(zest::TestCase&);                       \
   bool ZEST_CLS(g)::b = zest::Runner::add(                             \
     ZEST_CLS(g)::c, #g, t, ZEST_FUN(g), __FILE__, __LINE__);           \
-  template <> void ZEST_FUN(g)(zest::TestCase& _z_t)                   \
-
-} // namespace zest
+  template <> void ZEST_FUN(g)(zest::TestCase& _z_t)
 
 
-////////////////////////////////////////////////////////////////////////
-// Public API
+static auto& run = Runner::run;
+static auto& skip = Runner::skip;
+static auto& only = Runner::only;
 
 #define THIS_TEST() (_z_t)
 #define THIS_TEST_AS(T) (dynamic_cast<T&>(_z_t))
 #define TEST(Group, Title) ZEST_TEST(zest::TestCase, Group, Title)
-#define is_eq(e,a) zest::is_eq_(_z_t, #e,(e), #a,(a), __FILE__,__LINE__)
-#define is_ne(e,a) zest::is_ne_(_z_t, #e,(e), #a,(a), __FILE__,__LINE__)
-#define is_gt(e,a) zest::is_gt_(_z_t, #e,(e), #a,(a), __FILE__,__LINE__)
-#define is_lt(e,a) zest::is_lt_(_z_t, #e,(e), #a,(a), __FILE__,__LINE__)
-#define is_ge(e,a) zest::is_ge_(_z_t, #e,(e), #a,(a), __FILE__,__LINE__)
-#define is_le(e,a) zest::is_le_(_z_t, #e,(e), #a,(a), __FILE__,__LINE__)
-namespace zest {
-static auto& run = Runner::run;
-static auto& skip = Runner::skip;
-static auto& only = Runner::only;
-}
+#define is_eq(e,a) zest::is_eq_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
+#define is_ne(e,a) zest::is_ne_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
+#define is_gt(e,a) zest::is_gt_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
+#define is_lt(e,a) zest::is_lt_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
+#define is_ge(e,a) zest::is_ge_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
+#define is_le(e,a) zest::is_le_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
 
-////////////////////////////////////////////////////////////////////////
+} // namespace zest
 

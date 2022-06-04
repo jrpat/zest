@@ -81,10 +81,10 @@ must capture, either by value or reference.
 CONFIGURATION
 -------------
 
-Zest tries to be smart about whether to output ANSI colors
-with its output. You shouldn't ever have to think about it.
-But if you want to disable color output entirely,
-define `ZEST_NO_COLOR` before #include'ing zest.hh:
+Zest tries to be smart about whether to output ANSI colors.
+You shouldn't ever have to think about it. But if you want
+to disable color output entirely, define `ZEST_NO_COLOR`
+before #include'ing zest.hh:
 
     c++ ... -DZEST_NO_COLOR
 
@@ -118,20 +118,19 @@ Example:
         }
         void after() {
           std::cout << "after count = " << count;
-          if (count < 0) { fail() << "Count too low!"; }
+          if (count < 0) fail() << "Count too low!";
         }
     };
+
+Then use the `ZEST_TEST` macro to define a syntax for your new type:
+
+    #define COUNTER_TEST(group, title) \
+      ZEST_TEST(CounterTestCase, group, title)
 
 Inside your tests, you can use the `THIS_TEST_AS` macro to get
 a reference to the current subclass test:
 
     THIS_TEST_AS(CounterTestCase)  // CounterTestCase&
-
-As an additional convenience, you can use the `ZEST_TEST` macro to
-provide a "native-feeling" syntax for your new test type:
-
-    #define COUNTER_TEST(group, title) \
-      ZEST_TEST(CounterTestCase, group, title)
 
 Then define counter tests like you'd expect:
 
@@ -146,20 +145,78 @@ Then define counter tests like you'd expect:
       THIS_TEST_AS(CounterTest).count = -1;
     }
 
-
 "passing test" will output:
 
     before count = 0
     -- test --
     after count = 99
 
-and "failing test" will fail with a "Count too low!" message.
+and "failing test" will fail with a standard failure output:
+
+    /path/to/file:144: FAIL: Count too low!
 
 
 SAMPLE OUTPUT
 -------------
 
 The output of `make test-pass`:
+```
+
+[FirstGroup]
+ ✔ is_ok
+ ✔ make_ok
+ ✔ final_digits
+ ✔ incr_final_digits
+
+[SecondGroup]
+ ✔ Mutually Exclusive Types
+ ✔ Empty
+ ✔ Root Only
+ ✔ Absolute Foobars
+ ✔ Relative Foobars
+ ✔ Absolute Bazquxs
+ ✔ Relative Bazquxs
+ ✔ Parent
+ ✔ Trailing Slash is Ignored
+ ✔ Lexically Normalized
+ ✔ Various Pathological
+ ✔ Comparisons
+
+[ThirdGroup]
+ ✔ Delegate
+ ✔ Foobar
+ ✔ Bazqux
+ ✔ Output
+
+[FourthGroup]
+ ✔ Basic
+ ✔ Construct w/ various types
+ ✔ Copy affects refcount
+ ✔ Move does not affect refcount
+ ✔ Registry auto add/remove
+ ✔ std::set can hold
+ ✔ std::unordered_set can hold
+ ✔ gensym
+
+[FifthGroup]
+ ✔ MAKE_x & FIND_x are inverses
+ ✔ Components
+ ✔ Sortable
+ ✔ Equality
+ ✔ Next
+
+[SixthGroup]
+ ✔ Constructors
+
+[SeventhGroup]
+  …skipping…
+
+┌──────┐
+│ PASS │ (1 skipped)
+└──────┘
+```
+
+The output of `make test-fail`:
 ```
 
 [FirstGroup]
@@ -212,68 +269,7 @@ The output of `make test-pass`:
 [SeventhGroup]
   …skipping…
 
-
 ┌──────┐
 │ FAIL │ (1 skipped)
 └──────┘
-
-```
-
-The output of `make test-fail`:
-```
-
-[FirstGroup]
- ✔ is_ok
- ✔ make_ok
- ✔ final_digits
- ✔ incr_final_digits
-
-[SecondGroup]
- ✔ Mutually Exclusive Types
- ✔ Empty
- ✔ Root Only
- ✔ Absolute Foobars
- ✔ Relative Foobars
- ✔ Absolute Bazquxs
- ✔ Relative Bazquxs
- ✔ Parent
- ✔ Trailing Slash is Ignored
- ✔ Lexically Normalized
- ✔ Various Pathological
- ✔ Comparisons
-
-[ThirdGroup]
- ✔ Delegate
- ✔ Foobar
- ✔ Bazqux
- ✔ Output
-
-[FourthGroup]
- ✔ Basic
- ✔ Construct w/ various types
- ✔ Copy affects refcount
- ✔ Move does not affect refcount
- ✔ Registry auto add/remove
- ✔ std::set can hold
- ✔ std::unordered_set can hold
- ✔ gensym
-
-[FifthGroup]
- ✔ MAKE_x & FIND_x are inverses
- ✔ Components
- ✔ Sortable
- ✔ Equality
- ✔ Next
-
-[SixthGroup]
- ✔ Constructors
-
-[SeventhGroup]
-  …skipping…
-
-
-┌──────┐
-│ PASS │ (1 skipped)
-└──────┘
-
 ```

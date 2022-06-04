@@ -51,11 +51,9 @@ const char* fake_fail =
   "\n[SeventhGroup]"
   "\n  …skipping…"
   "\n"
-  "\n"
   "\n┌──────┐"
   "\n│ FAIL │ (1 skipped)"
   "\n└──────┘"
-  "\n"
   "\n"
 ;
 
@@ -109,11 +107,9 @@ const char* fake_pass =
   "\n[SeventhGroup]"
   "\n  …skipping…"
   "\n"
-  "\n"
   "\n┌──────┐"
   "\n│ PASS │ (1 skipped)"
   "\n└──────┘"
-  "\n"
   "\n"
 ;
 
@@ -124,7 +120,7 @@ TEST(FakeTest, "not real")
 
 int main(int argc, const char* argv[])
 {
-  if (! ((argc > 1) && !strcmp("fail", argv[1]))) {
+  if ((argc > 1) && !strcmp("fail", argv[1])) {
     std::cerr << fake_fail;
   } else {
     std::cerr << fake_pass;
