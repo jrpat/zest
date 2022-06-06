@@ -27,12 +27,12 @@ README.md: $(h) $(test-bin) Makefile
 	@echo                                              >>$@
 	@echo 'The output of `make test-pass`:'            >>$@
 	@echo '```'                                        >>$@
-	@-$(test-bin) pass                                2>>$@
+	@-$(test-bin) pass                                 >>$@
 	@echo '```'                                        >>$@
 	@echo                                              >>$@
 	@echo 'The output of `make test-fail`:'            >>$@
 	@echo '```'                                        >>$@
-	@-$(test-bin) fail                                2>>$@
+	@-$(test-bin) fail                                 >>$@
 	@echo '```'                                        >>$@
 	@echo OK
 

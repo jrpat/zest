@@ -121,9 +121,9 @@ TEST(FakeTest, "not real")
 int main(int argc, const char* argv[])
 {
   if ((argc > 1) && !strcmp("fail", argv[1])) {
-    std::cerr << fake_fail;
+    std::cout << fake_fail;
   } else {
-    std::cerr << fake_pass;
+    std::cout << fake_pass;
   }
 }
 
