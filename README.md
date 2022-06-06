@@ -103,10 +103,14 @@ useful in a variety of situations from simple shared setup/teardown
 for a handful of tests, to more advanced uses like automatically
 awaiting futures or doing custom reporting.
 
-Look at zest::TestCase for available member functions and variables.
-
 The only restriction on TestCase subclasses is that they must be
 default-constructible.
+
+From within either hook, you can fail the test:
+
+    fail("message");
+
+See zest::TestCase for other member functions and variables.
 
 Example:
 
@@ -154,7 +158,7 @@ Then define counter tests like you'd expect:
 
 and "failing test" will fail with a standard failure output:
 
-    /path/to/file:144: FAIL: Count too low!
+    /path/to/file:149: FAIL: Count too low!
 
 
 SAMPLE OUTPUT

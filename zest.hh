@@ -104,10 +104,14 @@
 **  for a handful of tests, to more advanced uses like automatically
 **  awaiting futures or doing custom reporting.
 **
-**  Look at zest::TestCase for available member functions and variables.
-**
 **  The only restriction on TestCase subclasses is that they must be
 **  default-constructible.
+**
+**  From within either hook, you can fail the test:
+**
+**      fail("message");
+**
+**  See zest::TestCase for other member functions and variables.
 **
 **  Example:
 **
@@ -155,7 +159,7 @@
 **
 **  and "failing test" will fail with a standard failure output:
 **
-**      /path/to/file:144: FAIL: Count too low!
+**      /path/to/file:149: FAIL: Count too low!
 */
 
 #include <cstdlib>
@@ -169,7 +173,7 @@
 namespace zest {
 
 #define ZOUT(x) do{ std::cout << x << std::flush; }while(0)
-#define ZPRN(x) do{ std::cout << x << std::endl << std::flush; }while(0)
+#define ZPRN(x) do{ std::cout << x << std::endl; }while(0)
 #define ZLOG(x) ZPRN(#x " = " << (x))
 
 static inline const char *cRED, *cGRN, *cDIM, *cOFF=0;
@@ -191,9 +195,9 @@ template <Printable T>
 std::ostream& operator<<(std::ostream& os, std::optional<T> opt)
 { if (opt){ os << *opt; } else { os << "(none)"; } return os; }
 
-
 using Str = std::string;
 using Run = void(struct TestCase&);
+
 
 struct TestCase
 {
@@ -215,7 +219,7 @@ struct TestCase
       output() << file << ":" << line << ": " << "FAIL: ";
       return std::cout;
     }
-    inline std::ostream& fail() { return fail(file, line); }
+    inline void fail(const Str& msg) { fail(file,line) << msg << "\n"; }
 
     inline virtual void before() {}
     inline virtual void after() {}
@@ -268,12 +272,12 @@ struct Runner
           nfail += test->failed ? 1 : 0;
         }
       }
-      auto CLR = nfail ? cRED : cGRN;
-      printf("%s\n┌──────┐", CLR);
-      printf("%s\n│ %-4s │", CLR, (nfail ? "FAIL" : "PASS"));
+      auto C = nfail ? cRED : cGRN;
+      printf("%s\n┌──────┐", C);
+      printf("%s\n│ %-4s │", C, (nfail ? "FAIL" : " OK "));
       if (nskip) printf("%s (%d skipped)", cDIM, nskip);
-      printf("%s\n└──────┘", CLR);
-      printf("\n%s\n", cOFF);
+      printf("%s\n└──────┘", C);
+      printf("%s\n", cOFF);
       return nfail ? 1 : 0;
     }
 };
