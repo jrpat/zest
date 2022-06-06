@@ -78,15 +78,16 @@ must capture, either by value or reference.
 
 
 
-CONFIGURATION
--------------
+COLORS
+------
 
-Zest tries to be smart about whether to output ANSI colors.
-You shouldn't ever have to think about it. But if you want
-to disable color output entirely, define `ZEST_NO_COLOR`
-before #include'ing zest.hh:
+By default, zest tries to be smart about whether to output ANSI
+color codes. It checks for a tty, non-dumb $TERM, and $NO_COLOR.
+You can also instruct it explicitly:
 
-    c++ ... -DZEST_NO_COLOR
+    zest::color(true)                // enable color output
+    zest::color(false)               // disable color output
+    zest::color(zest::autocolor())   // figure out color output
 
 
 

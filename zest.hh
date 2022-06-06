@@ -79,15 +79,16 @@
 **
 **
 **
-**  CONFIGURATION
-**  -------------
+**  COLORS
+**  ------
 **
-**  Zest tries to be smart about whether to output ANSI colors.
-**  You shouldn't ever have to think about it. But if you want
-**  to disable color output entirely, define `ZEST_NO_COLOR`
-**  before #include'ing zest.hh:
+**  By default, zest tries to be smart about whether to output ANSI
+**  color codes. It checks for a tty, non-dumb $TERM, and $NO_COLOR.
+**  You can also instruct it explicitly:
 **
-**      c++ ... -DZEST_NO_COLOR
+**      zest::color(true)                // enable color output
+**      zest::color(false)               // disable color output
+**      zest::color(zest::autocolor())   // figure out color output
 **
 **
 **
@@ -157,16 +158,13 @@
 **      /path/to/file:144: FAIL: Count too low!
 */
 
+#include <cstdlib>
 #include <iostream>
 #include <map>
 #include <optional>
 #include <string>
 #include <vector>
-
-#if !defined(ZEST_NO_COLOR)
-# include <unistd.h>
-# include <cstdlib>
-#endif
+#include <unistd.h>
 
 namespace zest {
 
@@ -174,18 +172,17 @@ namespace zest {
 #define ZPRN(x) do{ std::cout << x << std::endl << std::flush; }while(0)
 #define ZLOG(x) ZPRN(#x " = " << (x))
 
-#if defined(ZEST_NO_COLOR)
-static inline bool DOCOLOR = false;
-#else
-static inline bool DOCOLOR = isatty(fileno(stdout)) && getenv("TERM")
-                          && (getenv("TERM") != std::string_view("dumb"));
-#endif
-
-static inline auto cRED = !DOCOLOR ? "" : "\033[31m";
-static inline auto cGRN = !DOCOLOR ? "" : "\033[32m";
-static inline auto cDIM = !DOCOLOR ? "" : "\033[38;5;8m";
-static inline auto cOFF = !DOCOLOR ? "" : "\033[m";
-
+static inline const char *cRED, *cGRN, *cDIM, *cOFF=0;
+inline bool autocolor() {
+  return isatty(fileno(stdout)) && !getenv("NO_COLOR") &&
+    (getenv("TERM") && (getenv("TERM") != std::string_view("dumb")));
+}
+inline void color(bool enabled) {
+  cRED = !enabled ? "" : "\033[31m";
+  cGRN = !enabled ? "" : "\033[32m";
+  cDIM = !enabled ? "" : "\033[38;5;8m";
+  cOFF = !enabled ? "" : "\033[m";
+}
 
 template <class T>
 concept Printable = requires(std::ostream& os, T x) { os << x; };
@@ -252,6 +249,7 @@ struct Runner
     static inline int run() {
       int nfail = 0;
       int nskip = 0;
+      if (!cOFF) { color(autocolor()); }
       for (auto& [group, tests] : groups) {
         ZPRN("\n[" << group << "]");
         if ((tests[0] == &Flag::skip) ||
