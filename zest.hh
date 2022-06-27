@@ -10,7 +10,7 @@
 **  USAGE
 **  -----
 **
-**  Define a test:
+**  Define a test and run assertions:
 **
 **      TEST(GroupName, "description")
 **      {
@@ -20,6 +20,9 @@
 **        is_lt(expected, actual);  // expected <  actual
 **        is_ge(expected, actual);  // expected >= actual
 **        is_le(expected, actual);  // expected <= actual
+**
+**        // assertions return booleans
+**        bool ok = is_eq(expected, actual);
 **      }
 **
 **
@@ -56,26 +59,9 @@
 **      ZLOG(x)            // ZPRN(#x " = " << x)
 **
 **
-**  Get a reference to the current test from inside a TEST:
+**  Get a reference to the current TestCase:
 **
-**      THIS_TEST()  // zest::TestCase&
-**
-**
-**
-**  LAMBDAS
-**  -------
-**
-**  Assertions require access to the current test pointer, which is a
-**  local variable inside functions. That means that lambdas in TESTs
-**  must capture, either by value or reference.
-**
-**      TEST(MyGroup, "lambda test")
-**      {
-**        auto good_by_val = [=](int x){ is_eq(99, x); }
-**        auto good_by_ref = [&](int x){ is_eq(99, x); }
-**        auto good_manual = [THIS_TEST()](int x){ is_eq(99, x); }
-**        auto ERROR = [](int x){ is_eq(99, x); }
-**      }
+**      zest::current()  // TestCase& / throws if no current test
 **
 **
 **
@@ -124,7 +110,7 @@
 **          }
 **          void after() {
 **            std::cout << "after count = " << count;
-**            if (count < 0) fail() << "Count too low!";
+**            if (count < 0) fail("Count too low!");
 **          }
 **      };
 **
@@ -133,22 +119,22 @@
 **      #define COUNTER_TEST(group, title) \
 **        ZEST_TEST(CounterTestCase, group, title)
 **
-**  Inside your tests, you can use the `THIS_TEST_AS` macro to get
-**  a reference to the current subclass test:
+**  Inside your tests, you can use `zest::current` to get
+**  a reference to the current test:
 **
-**      THIS_TEST_AS(CounterTestCase)  // CounterTestCase&
+**      zest::current<CounterTestCase>()  // CounterTestCase&
 **
 **  Then define counter tests like you'd expect:
 **
 **      COUNTER_TEST(MyGroup, "passing test")
 **      {
 **        ZPRN("-- test --");
-**        THIS_TEST_AS(CounterTest).count = 99;
+**        zest::current<CounterTest>().count = 99;
 **      }
 **
 **      COUNTER_TEST(MyGroup, "failing test")
 **      {
-**        THIS_TEST_AS(CounterTest).count = -1;
+**        zest::current<CounterTest>().count = -1;
 **      }
 **
 **  "passing test" will output:
@@ -159,14 +145,14 @@
 **
 **  and "failing test" will fail with a standard failure output:
 **
-**      /path/to/file:149: FAIL: Count too low!
+**      /path/to/file:137: FAIL: Count too low!
 */
 
-#include <cstdlib>
 #include <iostream>
 #include <map>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <unistd.h>
 
@@ -196,7 +182,7 @@ std::ostream& operator<<(std::ostream& os, std::optional<T> opt)
 { if (opt){ os << *opt; } else { os << "(none)"; } return os; }
 
 using Str = std::string;
-using Run = void(struct TestCase&);
+using Run = void();
 
 
 struct TestCase
@@ -210,7 +196,7 @@ struct TestCase
 
     std::ostream& output() {
       if (!done && (failed == 1)) ZPRN(cRED << " ✗ " << title << cOFF);
-      else if (done && (!failed)) ZPRN(cGRN << " ✔ " << title << cOFF);
+      else if (done && (!failed)) ZPRN(cGRN << " ✓ " << title << cOFF);
       return std::cout;
     }
 
@@ -223,15 +209,17 @@ struct TestCase
 
     inline virtual void before() {}
     inline virtual void after() {}
+    virtual ~TestCase() {}
 };
 
-class Test { public: template <class T> static void run(TestCase&); };
+class Test { public: template <class T> static void run(); };
 struct Flag { static inline TestCase skip, only; };
 
 struct Runner
 {
     static inline std::map<Str, std::vector<TestCase*>> groups;
     static inline bool only_mode = false;
+    static inline TestCase* current = nullptr;
 
     static bool add(TestCase& c, Str g, Str t, Run* r, Str f, int l) {
       c.run=r; c.title=t; c.file=f; c.line=l;
@@ -255,21 +243,22 @@ struct Runner
       int nskip = 0;
       if (!cOFF) { color(autocolor()); }
       for (auto& [group, tests] : groups) {
-        ZPRN("\n[" << group << "]");
         if ((tests[0] == &Flag::skip) ||
             ((tests[0] != &Flag::only) && only_mode)) {
           nskip += tests.size() - 1;
-          ZPRN(cDIM << "  …skipping…" << cOFF);
           continue;
         }
+        ZPRN("\n[" << group << "]");
         for (auto test : tests) {
           if (!test->run) { continue; }
+          current = test;
           test->before();
-          test->run(*test);
+          test->run();
           test->after();
           test->done = true;
           test->output();
           nfail += test->failed ? 1 : 0;
+          current = nullptr;
         }
       }
       auto C = nfail ? cRED : cGRN;
@@ -285,13 +274,15 @@ struct Runner
 
 #define ZEST_IS_FN(NAME, COMP)                                         \
   template <class LHS, class RHS>                                      \
-  bool is_##NAME##_(zest::TestCase& test, zest::Str f, size_t l,       \
-                    zest::Str lhs_str, const LHS& lhs,                 \
-                    zest::Str rhs_str, const RHS& rhs) {               \
-    if (test.done) { throw "is_" #NAME " in finished test"; }          \
+  bool is_##NAME##_(Str f, size_t l,                                   \
+                    Str lhs_str, const LHS& lhs,                       \
+                    Str rhs_str, const RHS& rhs) {                     \
+    TestCase* test = Runner::current;                                  \
+    if (!test) { throw "Called is_" #NAME " while no current test"; }  \
+    if (test->done) { throw "Called is_" #NAME " in finished test"; }  \
     if ((lhs COMP rhs)) { return true; }                               \
-    auto& out = test.fail(f,l) << lhs_str << " " #COMP " " << rhs_str; \
-    if constexpr (zest::Printable<RHS>) out << " (got " << rhs << ")"; \
+    auto& out = test->fail(f,l) << lhs_str << " " #COMP " " << rhs_str;\
+    if constexpr (Printable<RHS>) out << " (got " << rhs << ")";       \
     out << "\n"; return false; }
 
 ZEST_IS_FN(eq, ==)
@@ -310,25 +301,30 @@ ZEST_IS_FN(le, <=)
 
 #define ZEST_TEST(C, g, t)                                             \
   struct ZEST_CLS(g) {static inline C c; static bool b;};              \
-  template <> void ZEST_FUN(g)(zest::TestCase&);                       \
+  template <> void ZEST_FUN(g)();                                      \
   bool ZEST_CLS(g)::b = zest::Runner::add(                             \
     ZEST_CLS(g)::c, #g, t, ZEST_FUN(g), __FILE__, __LINE__);           \
-  template <> void ZEST_FUN(g)(zest::TestCase& _z_t)
+  template <> void ZEST_FUN(g)()
 
 
 static auto& run = Runner::run;
 static auto& skip = Runner::skip;
 static auto& only = Runner::only;
 
-#define THIS_TEST() (_z_t)
-#define THIS_TEST_AS(T) (dynamic_cast<T&>(_z_t))
+template <class T = TestCase>
+static inline T& current() {
+  if (!Runner::current)
+    throw "Called zest::current() while no current test";
+  return dynamic_cast<T&>(*Runner::current);
+}
+
 #define TEST(Group, Title) ZEST_TEST(zest::TestCase, Group, Title)
-#define is_eq(e,a) zest::is_eq_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
-#define is_ne(e,a) zest::is_ne_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
-#define is_gt(e,a) zest::is_gt_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
-#define is_lt(e,a) zest::is_lt_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
-#define is_ge(e,a) zest::is_ge_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
-#define is_le(e,a) zest::is_le_(_z_t, __FILE__,__LINE__, #e,(e), #a,(a))
+#define is_eq(e,a) zest::is_eq_(__FILE__,__LINE__, #e,(e), #a,(a))
+#define is_ne(e,a) zest::is_ne_(__FILE__,__LINE__, #e,(e), #a,(a))
+#define is_gt(e,a) zest::is_gt_(__FILE__,__LINE__, #e,(e), #a,(a))
+#define is_lt(e,a) zest::is_lt_(__FILE__,__LINE__, #e,(e), #a,(a))
+#define is_ge(e,a) zest::is_ge_(__FILE__,__LINE__, #e,(e), #a,(a))
+#define is_le(e,a) zest::is_le_(__FILE__,__LINE__, #e,(e), #a,(a))
 
 } // namespace zest
 

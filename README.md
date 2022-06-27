@@ -9,7 +9,7 @@ A `z`epto-scale t`est`ing library for C++20
 USAGE
 -----
 
-Define a test:
+Define a test and run assertions:
 
     TEST(GroupName, "description")
     {
@@ -19,6 +19,9 @@ Define a test:
       is_lt(expected, actual);  // expected <  actual
       is_ge(expected, actual);  // expected >= actual
       is_le(expected, actual);  // expected <= actual
+
+      // assertions return booleans
+      bool ok = is_eq(expected, actual);
     }
 
 
@@ -55,26 +58,9 @@ Small helpers for debugging:
     ZLOG(x)            // ZPRN(#x " = " << x)
 
 
-Get a reference to the current test from inside a TEST:
+Get a reference to the current TestCase:
 
-    THIS_TEST()  // zest::TestCase&
-
-
-
-LAMBDAS
--------
-
-Assertions require access to the current test pointer, which is a
-local variable inside functions. That means that lambdas in TESTs
-must capture, either by value or reference.
-
-    TEST(MyGroup, "lambda test")
-    {
-      auto good_by_val = [=](int x){ is_eq(99, x); }
-      auto good_by_ref = [&](int x){ is_eq(99, x); }
-      auto good_manual = [THIS_TEST()](int x){ is_eq(99, x); }
-      auto ERROR = [](int x){ is_eq(99, x); }
-    }
+    zest::current()  // TestCase& / throws if no current test
 
 
 
@@ -123,7 +109,7 @@ Example:
         }
         void after() {
           std::cout << "after count = " << count;
-          if (count < 0) fail() << "Count too low!";
+          if (count < 0) fail("Count too low!");
         }
     };
 
@@ -132,22 +118,22 @@ Then use the `ZEST_TEST` macro to define a syntax for your new type:
     #define COUNTER_TEST(group, title) \
       ZEST_TEST(CounterTestCase, group, title)
 
-Inside your tests, you can use the `THIS_TEST_AS` macro to get
-a reference to the current subclass test:
+Inside your tests, you can use `zest::current` to get
+a reference to the current test:
 
-    THIS_TEST_AS(CounterTestCase)  // CounterTestCase&
+    zest::current<CounterTestCase>()  // CounterTestCase&
 
 Then define counter tests like you'd expect:
 
     COUNTER_TEST(MyGroup, "passing test")
     {
       ZPRN("-- test --");
-      THIS_TEST_AS(CounterTest).count = 99;
+      zest::current<CounterTest>().count = 99;
     }
 
     COUNTER_TEST(MyGroup, "failing test")
     {
-      THIS_TEST_AS(CounterTest).count = -1;
+      zest::current<CounterTest>().count = -1;
     }
 
 "passing test" will output:
@@ -158,7 +144,7 @@ Then define counter tests like you'd expect:
 
 and "failing test" will fail with a standard failure output:
 
-    /path/to/file:149: FAIL: Count too low!
+    /path/to/file:137: FAIL: Count too low!
 
 
 SAMPLE OUTPUT
