@@ -20,6 +20,8 @@ Define a test and run assertions:
       is_ge(expected, actual);  // actual >= expected
       is_le(expected, actual);  // actual <= expected
 
+      is_thrown(type, body);    // expect body to throw type
+
       // assertions return booleans
       bool ok = is_eq(expected, actual);
     }
@@ -29,6 +31,10 @@ think of each assertion as a named function:
 
     is_gt(3, 4) → is_gt_3(4);  // true
     is_gt(4, 3) → is_gt_4(3);  // false
+
+You can check that a certain type of exception is thrown:
+
+    is_thrown(expected_error_type, body)
 
 
 Run all the tests:

@@ -21,6 +21,8 @@
 **        is_ge(expected, actual);  // actual >= expected
 **        is_le(expected, actual);  // actual <= expected
 **
+**        is_thrown(type, body);    // expect body to throw type
+**
 **        // assertions return booleans
 **        bool ok = is_eq(expected, actual);
 **      }
@@ -30,6 +32,10 @@
 **
 **      is_gt(3, 4) → is_gt_3(4);  // true
 **      is_gt(4, 3) → is_gt_4(3);  // false
+**
+**  You can check that a certain type of exception is thrown:
+**
+**      is_thrown(expected_error_type, body)
 **
 **
 **  Run all the tests:
@@ -297,14 +303,14 @@ struct Runner {
   bool is_##NAME##_(Str f, size_t l,                                   \
                     Str lhs_str, const LHS& lhs,                       \
                     Str rhs_str, const RHS& rhs) {                     \
-    TestCase* test = Runner::current;                                  \
-    if (!test) { throw "Called is_" #NAME " while no current test"; }  \
-    if (test->done) { throw "Called is_" #NAME " in finished test"; }  \
+    TestCase* t = Runner::current;                                     \
+    if (!t) { throw "Called is_" #NAME " while no current test"; }     \
+    if (t->done) { throw "Called is_" #NAME " in finished test"; }     \
     if ((rhs COMP lhs)) { return true; }                               \
-    auto& out = test->fail(f,l) << rhs_str << " " #COMP " " << lhs_str;\
+    auto& out = t->fail(f,l) << rhs_str << " " #COMP " " << lhs_str;   \
     if constexpr (Printable<LHS> && Printable<RHS>)                    \
       out << "  (" << rhs << " " #COMP " " << lhs << ")";              \
-    out << "\n"; return false; }
+    out << "\n"; return false; }                                       \
 
 ZEST_IS_FN(eq, ==)
 ZEST_IS_FN(ne, !=)
@@ -312,6 +318,17 @@ ZEST_IS_FN(gt, >)
 ZEST_IS_FN(lt, <)
 ZEST_IS_FN(ge, >=)
 ZEST_IS_FN(le, <=)
+
+template <class E, class F>
+bool is_thrown_(Str f, size_t l, Str e, F&& body) {
+  TestCase* t = Runner::current;
+  if (!t) { throw "Called is_thrown while no current test"; }
+  int n = 0;
+  try { body(); } catch (E) {++n;} catch(...) { t->fail(f, l)
+    << "Error thrown was not a " << e << std::endl; ++n; }
+  if (n == 0) { t->fail(f, l) << "Nothing thrown" << std::endl; }
+  return n != 0;
+}
 
 
 #define ZEST_FULLNAME_(pre, grp, uniq) pre##_##grp##_##uniq
@@ -346,6 +363,9 @@ static inline T& current() {
 #define is_lt(e,a) zest::is_lt_(__FILE__,__LINE__, #e,(e), #a,(a))
 #define is_ge(e,a) zest::is_ge_(__FILE__,__LINE__, #e,(e), #a,(a))
 #define is_le(e,a) zest::is_le_(__FILE__,__LINE__, #e,(e), #a,(a))
+
+#define is_thrown(E, body) \
+  zest::is_thrown_<E>(__FILE__,__LINE__, #E, [&]() mutable { body; })
 
 } // namespace zest
 
