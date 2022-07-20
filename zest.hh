@@ -14,16 +14,22 @@
 **
 **      TEST(GroupName, "description")
 **      {
-**        is_eq(expected, actual);  // expected == actual
-**        is_ne(expected, actual);  // expected != actual
-**        is_gt(expected, actual);  // expected >  actual
-**        is_lt(expected, actual);  // expected <  actual
-**        is_ge(expected, actual);  // expected >= actual
-**        is_le(expected, actual);  // expected <= actual
+**        is_eq(expected, actual);  // actual == expected
+**        is_ne(expected, actual);  // actual != expected
+**        is_gt(expected, actual);  // actual >  expected
+**        is_lt(expected, actual);  // actual <  expected
+**        is_ge(expected, actual);  // actual >= expected
+**        is_le(expected, actual);  // actual <= expected
 **
 **        // assertions return booleans
 **        bool ok = is_eq(expected, actual);
 **      }
+**
+**  If the assertion syntax seems backward,
+**  think of each assertion as a named function:
+**
+**      is_gt(3, 4) → is_gt_3(4);  // true
+**      is_gt(4, 3) → is_gt_4(3);  // false
 **
 **
 **  Run all the tests:
@@ -93,9 +99,14 @@
 **  The only restriction on TestCase subclasses is that they must be
 **  default-constructible.
 **
-**  From within either hook, you can fail the test:
+**  From within either hook, you can fail the test using fail().
+**  To print a simple failure message, just pass it a string:
 **
 **      fail("message");
+**
+**  With no argument, fail() returns the output stream:
+**
+**      fail() << a << b << c << std::endl;  // (don't forget std::endl)
 **
 **  See zest::TestCase for other member functions and variables.
 **
@@ -105,10 +116,10 @@
 **      {
 **        public: // test cases do not have access to private members
 **          int count;
-**          void before() {
+**          void before() override {
 **            std::cout << "before count = " << count;
 **          }
-**          void after() {
+**          void after() override {
 **            std::cout << "after count = " << count;
 **            if (count < 0) fail("Count too low!");
 **          }
@@ -148,6 +159,7 @@
 **      /path/to/file:137: FAIL: Count too low!
 */
 
+#include <exception>
 #include <iostream>
 #include <map>
 #include <optional>
@@ -156,7 +168,8 @@
 #include <vector>
 #include <unistd.h>
 
-namespace zest {
+namespace zest
+{
 
 #define ZOUT(x) do{ std::cout << x << std::flush; }while(0)
 #define ZPRN(x) do{ std::cout << x << std::endl; }while(0)
@@ -181,94 +194,101 @@ template <Printable T>
 std::ostream& operator<<(std::ostream& os, std::optional<T> opt)
 { if (opt){ os << *opt; } else { os << "(none)"; } return os; }
 
+inline std::ostream& operator<<(std::ostream& os, const std::exception& e)
+{ os << e.what(); return os; }
+
 using Str = std::string;
 using Run = void();
 
 
-struct TestCase
-{
-    Run* run;
-    Str title;
-    Str file;
-    int line;
-    int failed = 0;
-    bool done = false;
+struct TestCase {
+  Run* run;
+  Str title;
+  Str file;
+  int line;
+  int failed = 0;
+  bool done = false;
 
-    std::ostream& output() {
-      if (!done && (failed == 1)) ZPRN(cRED << " ✗ " << title << cOFF);
-      else if (done && (!failed)) ZPRN(cGRN << " ✓ " << title << cOFF);
-      return std::cout;
-    }
+  std::ostream& output() {
+    if (!done && (failed == 1)) ZPRN(cRED << " ✗ " << title << cOFF);
+    else if (done && (!failed)) ZPRN(cGRN << " ✓ " << title << cOFF);
+    return std::cout;
+  }
 
-    inline std::ostream& fail(const Str& file, int line)  {
-      ++failed;
-      output() << file << ":" << line << ": " << "FAIL: ";
-      return std::cout;
-    }
-    inline void fail(const Str& msg) { fail(file,line) << msg << "\n"; }
+  inline std::ostream& fail(const Str& file, int line)  {
+    ++failed;
+    return output() << file << ":" << line << ": " << "FAIL: ";
+  }
 
-    inline virtual void before() {}
-    inline virtual void after() {}
-    virtual ~TestCase() {}
+  inline std::ostream& fail(const Str& msg = "") {
+    return fail(file,line) << msg << (msg.empty() ? "" : "\n");
+  }
+
+  inline virtual void before() {}
+  inline virtual void after() {}
+  virtual ~TestCase() {}
 };
 
 class Test { public: template <class T> static void run(); };
 struct Flag { static inline TestCase skip, only; };
 
-struct Runner
-{
-    static inline std::map<Str, std::vector<TestCase*>> groups;
-    static inline bool only_mode = false;
-    static inline TestCase* current = nullptr;
+struct Runner {
+  static inline std::map<Str, std::vector<TestCase*>> groups;
+  static inline TestCase* current = nullptr;
+  static inline bool only_mode = false;
 
-    static bool add(TestCase& c, Str g, Str t, Run* r, Str f, int l) {
-      c.run=r; c.title=t; c.file=f; c.line=l;
-      groups[g].push_back(&c);
-      return true;
-    }
+  static bool add(TestCase& c, Str g, Str t, Run* r, Str f, int l) {
+    c.run=r; c.title=t; c.file=f; c.line=l;
+    groups[g].push_back(&c);
+    return true;
+  }
 
-    static void skip(Str group) {
-      auto& g = groups[group];
-      g.insert(g.begin(), &Flag::skip);
-    }
+  static void skip(Str group) {
+    auto& g = groups[group];
+    g.insert(g.begin(), &Flag::skip);
+  }
 
-    static void only(Str group) {
-      auto& g = groups[group];
-      g.insert(g.begin(), &Flag::only);
-      only_mode = true;
-    }
+  static void only(Str group) {
+    auto& g = groups[group];
+    g.insert(g.begin(), &Flag::only);
+    only_mode = true;
+  }
 
-    static inline int run() {
-      int nfail = 0;
-      int nskip = 0;
-      if (!cOFF) { color(autocolor()); }
-      for (auto& [group, tests] : groups) {
-        if ((tests[0] == &Flag::skip) ||
-            ((tests[0] != &Flag::only) && only_mode)) {
-          nskip += tests.size() - 1;
-          continue;
-        }
-        ZPRN("\n[" << group << "]");
-        for (auto test : tests) {
-          if (!test->run) { continue; }
-          current = test;
-          test->before();
-          test->run();
-          test->after();
-          test->done = true;
-          test->output();
-          nfail += test->failed ? 1 : 0;
-          current = nullptr;
-        }
+  static inline int run() {
+    int nfail=0, nskip=0;
+    if (!cOFF) { color(autocolor()); }
+    for (auto& [group, tests] : groups) {
+      if ((tests[0] == &Flag::skip) ||
+          ((tests[0] != &Flag::only) && only_mode)) {
+        nskip += tests.size() - 1;
+        continue;
       }
-      auto C = nfail ? cRED : cGRN;
-      printf("%s\n┌──────┐", C);
-      printf("%s\n│ %-4s │", C, (nfail ? "FAIL" : " OK "));
-      if (nskip) printf("%s (%d skipped)", cDIM, nskip);
-      printf("%s\n└──────┘", C);
-      printf("%s\n", cOFF);
-      return nfail ? 1 : 0;
+      ZPRN("\n[" << group << "]");
+      for (auto t : tests) {
+        if (!t->run) { continue; }
+        current = t;
+        t->before();
+        try {
+          t->run();
+        } catch (...) {
+          t->fail("Uncaught exception");
+          std::rethrow_exception(std::current_exception());
+        }
+        t->after();
+        t->done = true;
+        t->output();
+        nfail += t->failed ? 1 : 0;
+        current = nullptr;
+      }
     }
+    auto C = nfail ? cRED : cGRN;
+    printf("%s\n┌──────┐", C);
+    printf("%s\n│ %-4s │", C, (nfail ? "FAIL" : " OK "));
+    if (nskip) printf("%s (%d skipped)", cDIM, nskip);
+    printf("%s\n└──────┘", C);
+    printf("%s\n", cOFF);
+    return nfail ? 1 : 0;
+  }
 };
 
 
@@ -280,9 +300,10 @@ struct Runner
     TestCase* test = Runner::current;                                  \
     if (!test) { throw "Called is_" #NAME " while no current test"; }  \
     if (test->done) { throw "Called is_" #NAME " in finished test"; }  \
-    if ((lhs COMP rhs)) { return true; }                               \
-    auto& out = test->fail(f,l) << lhs_str << " " #COMP " " << rhs_str;\
-    if constexpr (Printable<RHS>) out << " (got " << rhs << ")";       \
+    if ((rhs COMP lhs)) { return true; }                               \
+    auto& out = test->fail(f,l) << rhs_str << " " #COMP " " << lhs_str;\
+    if constexpr (Printable<LHS> && Printable<RHS>)                    \
+      out << "  (" << rhs << " " #COMP " " << lhs << ")";              \
     out << "\n"; return false; }
 
 ZEST_IS_FN(eq, ==)

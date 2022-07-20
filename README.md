@@ -13,16 +13,22 @@ Define a test and run assertions:
 
     TEST(GroupName, "description")
     {
-      is_eq(expected, actual);  // expected == actual
-      is_ne(expected, actual);  // expected != actual
-      is_gt(expected, actual);  // expected >  actual
-      is_lt(expected, actual);  // expected <  actual
-      is_ge(expected, actual);  // expected >= actual
-      is_le(expected, actual);  // expected <= actual
+      is_eq(expected, actual);  // actual == expected
+      is_ne(expected, actual);  // actual != expected
+      is_gt(expected, actual);  // actual >  expected
+      is_lt(expected, actual);  // actual <  expected
+      is_ge(expected, actual);  // actual >= expected
+      is_le(expected, actual);  // actual <= expected
 
       // assertions return booleans
       bool ok = is_eq(expected, actual);
     }
+
+If the assertion syntax seems backward,
+think of each assertion as a named function:
+
+    is_gt(3, 4) → is_gt_3(4);  // true
+    is_gt(4, 3) → is_gt_4(3);  // false
 
 
 Run all the tests:
@@ -92,9 +98,14 @@ awaiting futures or doing custom reporting.
 The only restriction on TestCase subclasses is that they must be
 default-constructible.
 
-From within either hook, you can fail the test:
+From within either hook, you can fail the test using fail().
+To print a simple failure message, just pass it a string:
 
     fail("message");
+
+With no argument, fail() returns the output stream:
+
+    fail() << a << b << c << std::endl;  // (don't forget std::endl)
 
 See zest::TestCase for other member functions and variables.
 
@@ -104,10 +115,10 @@ Example:
     {
       public: // test cases do not have access to private members
         int count;
-        void before() {
+        void before() override {
           std::cout << "before count = " << count;
         }
-        void after() {
+        void after() override {
           std::cout << "after count = " << count;
           if (count < 0) fail("Count too low!");
         }
